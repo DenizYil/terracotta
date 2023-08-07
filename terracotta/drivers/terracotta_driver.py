@@ -205,6 +205,57 @@ class TerracottaDriver:
 
         return metadata
 
+    def get_metadatas(self, keys: ExtendedKeysType, items: List[List[str]]) -> Dict[str, Any]:
+        """Return all stored metadata for given keys.
+
+        Arguments:
+
+            keys: Keys of the requested dataset. Can either be given as a sequence of key values,
+                or as a mapping ``{key_name: key_value}``.
+
+        Returns:
+
+            A :class:`dict` with the values
+
+            - ``range``: global minimum and maximum value in dataset
+            - ``bounds``: physical bounds covered by dataset in latitude-longitude projection
+            - ``convex_hull``: GeoJSON shape specifying total data coverage in latitude-longitude
+              projection
+            - ``percentiles``: array of pre-computed percentiles from 1% through 99%
+            - ``mean``: global mean
+            - ``stdev``: global standard deviation
+            - ``metadata``: any additional client-relevant metadata
+
+        """
+        keys = self._standardize_keys(keys)
+
+        with self.meta_store.connect():
+            metadata = self.meta_store.get_metadatas(keys, items)
+
+            if metadata is None:
+                # metadata is not computed yet, trigger lazy loading
+                dataset = self.get_datasets(keys)
+                if not dataset:
+                    raise exceptions.DatasetNotFoundError("No dataset found")
+
+                path = squeeze(dataset.values())
+                metadata = self.compute_metadata(
+                    path, max_shape=self.LAZY_LOADING_MAX_SHAPE
+                )
+
+                try:
+                    self.insert(keys, path, metadata=metadata)
+                except exceptions.DatabaseNotWritableError as exc:
+                    raise exceptions.DatabaseNotWritableError(
+                        "Lazy loading requires a writable database"
+                    ) from exc
+
+                # ensure standardized/consistent output (types and floating point precision)
+                metadata = self.meta_store.get_metadata(keys)
+                assert metadata is not None
+
+        return metadata
+
     def insert(
         self,
         keys: ExtendedKeysType,

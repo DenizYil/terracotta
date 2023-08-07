@@ -2,11 +2,21 @@
 
 Flask route to handle /metadata calls.
 """
-
+from typing import List, Optional
 from marshmallow import Schema, fields, validate
 from flask import jsonify, Response
 
 from terracotta.server.flask_api import METADATA_API
+
+
+class MetadataDatasetsSchema(Schema):
+    keys = fields.List(
+        fields.List(
+            fields.String(example="key1")
+        ),
+        required=True,
+        description="Array containing all available key combinations",
+    )
 
 
 class MetadataSchema(Schema):
@@ -52,17 +62,46 @@ class MetadataSchema(Schema):
 
 @METADATA_API.route("/metadata/<path:keys>", methods=["GET"])
 def get_metadata(keys: str) -> Response:
-    """Get metadata for given dataset
+    """Get metadata for a given dataset
     ---
     get:
         summary: /metadata
-        description: Retrieve metadata for given dataset (identified by keys).
+        description: Retrieve metadata for a given dataset (identified by keys).
         parameters:
           - name: keys
             in: path
             description: Keys of dataset to retrieve metadata for (e.g. 'value1/value2')
             type: path
             required: true
+        responses:
+            200:
+                description: All metadata for given dataset
+                schema: MetadataSchema
+            404:
+                description: No dataset found for given key combination
+    """
+    from terracotta.handlers.metadata import metadata
+
+    parsed_keys = [key for key in keys.split("/") if key]
+    payload = metadata(parsed_keys)
+    schema = MetadataSchema()
+    return jsonify(schema.load(payload))
+
+
+@METADATA_API.route("/metadata/<path:keys>", methods=["POST"])
+def post_metadata(keys: Optional[str], datasets: List[List[str]]) -> Response:
+    """Get metadata for multiple datasets
+    ---
+    post:
+        summary: /metadata
+        description: Retrieve metadata for multiple datasets, identified by the body payload. Desired columns can be filtered as a query parameter.
+        parameters:
+          - name: keys
+            in: path
+            description: Keys of dataset to retrieve metadata for (e.g. 'value1/value2')
+            type: path
+            required: true
+          -
         responses:
             200:
                 description: All metadata for given dataset

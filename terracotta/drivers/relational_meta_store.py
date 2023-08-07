@@ -10,7 +10,7 @@ import re
 import urllib.parse as urlparse
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Dict, Iterator, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import sqlalchemy as sqla
@@ -376,6 +376,26 @@ class RelationalMetaStore(MetaStore, ABC):
         data_columns, _ = zip(*self._METADATA_COLUMNS)
         encoded_data = {col: getattr(row, col) for col in self.key_names + data_columns}
         return self._decode_data(encoded_data)
+
+    @trace("get_metadata")
+    @convert_exceptions("Could not retrieve metadata")
+    def get_metadatas(self, keys: KeysType, items: List[List[str]]) -> Optional[Dict[str, Any]]:
+        metadata_table = sqla.Table(
+            "metadata", self.sqla_metadata, autoload_with=self.sqla_engine
+        )
+        stmt = metadata_table.select().where(
+            *[metadata_table.c[key] == value for key, value in keys.items()]
+        )
+
+        with self.connect() as conn:
+            row = conn.execute(stmt).first()
+        if not row:
+            return None
+
+        data_columns, _ = zip(*self._METADATA_COLUMNS)
+        encoded_data = {col: getattr(row, col) for col in self.key_names + data_columns}
+        return self._decode_data(encoded_data)
+
 
     @trace("insert")
     @requires_writable

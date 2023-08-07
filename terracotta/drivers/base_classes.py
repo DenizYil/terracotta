@@ -111,6 +111,11 @@ class MetaStore(ABC):
         pass
 
     @abstractmethod
+    def get_metadatas(self, keys: KeysType, items: List[List[str]]) -> Optional[Dict[str, Any]]:
+        """Return all stored metadata for given keys."""
+        pass
+
+    @abstractmethod
     def insert(
         self, keys: KeysType, path: str, *, metadata: Optional[Mapping[str, Any]] = None
     ) -> None:
