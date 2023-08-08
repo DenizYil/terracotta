@@ -2,9 +2,9 @@
 
 Flask route to handle /metadata calls.
 """
-from typing import List, Optional
+from typing import Optional
 from marshmallow import Schema, fields, validate
-from flask import jsonify, Response
+from flask import jsonify, Response, request
 
 from terracotta.server.flask_api import METADATA_API
 
@@ -88,12 +88,13 @@ def get_metadata(keys: str) -> Response:
     return jsonify(schema.load(payload))
 
 
+@METADATA_API.route("/metadata", methods=["POST"])
 @METADATA_API.route("/metadata/<path:keys>", methods=["POST"])
-def post_metadata(keys: Optional[str], datasets: List[List[str]]) -> Response:
+def post_metadata(keys: Optional[str] = None) -> Response:
     """Get metadata for multiple datasets
     ---
     post:
-        summary: /metadata
+        summary: /metadata/<optional keys>
         description: Retrieve metadata for multiple datasets, identified by the body payload. Desired columns can be filtered as a query parameter.
         parameters:
           - name: keys
@@ -109,9 +110,10 @@ def post_metadata(keys: Optional[str], datasets: List[List[str]]) -> Response:
             404:
                 description: No dataset found for given key combination
     """
-    from terracotta.handlers.metadata import metadata
+    from terracotta.handlers.metadata import multiple_metadata
 
-    parsed_keys = [key for key in keys.split("/") if key]
-    payload = metadata(parsed_keys)
-    schema = MetadataSchema()
+    datasets = request.json["keys"]
+    parsed_keys = [key for key in keys.split("/") if key] if keys else None
+    payload = multiple_metadata(parsed_keys, datasets)
+    schema = MetadataSchema(many=True, partial=True)
     return jsonify(schema.load(payload))

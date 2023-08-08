@@ -111,7 +111,7 @@ class MetaStore(ABC):
         pass
 
     @abstractmethod
-    def get_metadatas(self, keys: KeysType, items: List[List[str]]) -> Optional[Dict[str, Any]]:
+    def get_multiple_metadata(self, keys: Optional[List[str]], items: List[List[str]]) -> Optional[Dict[str, Any]]:
         """Return all stored metadata for given keys."""
         pass
 

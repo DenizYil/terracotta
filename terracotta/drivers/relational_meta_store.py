@@ -10,7 +10,7 @@ import re
 import urllib.parse as urlparse
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Sequence, Tuple, Type, Union
 
 import numpy as np
 import sqlalchemy as sqla
@@ -98,7 +98,7 @@ class RelationalMetaStore(MetaStore, ABC):
         self.url = self._parse_path(path)
         self.sqla_engine = sqla.create_engine(
             self.url,
-            echo=False,
+            echo=True,
             future=True,
             connect_args={self.SQL_TIMEOUT_KEY: db_connection_timeout},
             # automatically re-spawn stale connections, see terracotta#266
@@ -335,6 +335,10 @@ class RelationalMetaStore(MetaStore, ABC):
         datasets_table = sqla.Table(
             "datasets", self.sqla_metadata, autoload_with=self.sqla_engine
         )
+
+        for column, values in where.items():
+            print("Column", column, "Values", values)
+
         stmt = (
             datasets_table.select()
             .where(
@@ -377,25 +381,53 @@ class RelationalMetaStore(MetaStore, ABC):
         encoded_data = {col: getattr(row, col) for col in self.key_names + data_columns}
         return self._decode_data(encoded_data)
 
-    @trace("get_metadata")
+    @trace("get_multiple_metadata")
     @convert_exceptions("Could not retrieve metadata")
-    def get_metadatas(self, keys: KeysType, items: List[List[str]]) -> Optional[Dict[str, Any]]:
+    def get_multiple_metadata(self, keys: Optional[List[str]], datasets: List[List[str]]) -> Optional[Dict[str, Any]]:
         metadata_table = sqla.Table(
             "metadata", self.sqla_metadata, autoload_with=self.sqla_engine
         )
-        stmt = metadata_table.select().where(
-            *[metadata_table.c[key] == value for key, value in keys.items()]
+
+        key_names = self.key_names
+
+        if keys:
+            # print all columns
+            print("Columsn", metadata_table.c.keys())
+            columns = [metadata_table.c[key] for key in keys]
+            stmt = metadata_table.select(*columns)
+        else:
+            stmt = metadata_table.select()
+
+        stmt = stmt.where(
+            sqla.or_(
+                *[
+                    sqla.and_(*[metadata_table.c[key_names[i]] == value for i, value in enumerate(dataset)])
+                    for dataset in datasets
+                ]
+            )
         )
 
         with self.connect() as conn:
-            row = conn.execute(stmt).first()
-        if not row:
+            rows = conn.execute(stmt).all()
+
+        if not rows:
             return None
 
+        metadata = []
         data_columns, _ = zip(*self._METADATA_COLUMNS)
-        encoded_data = {col: getattr(row, col) for col in self.key_names + data_columns}
-        return self._decode_data(encoded_data)
 
+        for row in rows:
+            encoded_data = {col: getattr(row, col) for col in data_columns}
+
+            if keys:
+                decoded = self._decode_specific_data(encoded_data, set(keys))
+            else:
+                decoded = self._decode_data(encoded_data)
+
+            decoded["keys"] = {col: getattr(row, col) for col in key_names}
+            metadata.append(decoded)
+
+        return metadata
 
     @trace("insert")
     @requires_writable
@@ -501,4 +533,33 @@ class RelationalMetaStore(MetaStore, ABC):
             ).tolist(),
             "metadata": json.loads(encoded["metadata"]),
         }
+        return decoded
+
+    @staticmethod
+    def _decode_specific_data(encoded: Mapping[str, any], keys: Set[str]) -> Dict[str, Any]:
+        decoded = {}
+
+        if "bounds" in keys:
+            decoded["bounds"] = tuple(
+                [encoded[f"bounds_{d}"] for d in ("north", "east", "south", "west")]
+            )
+
+        if "convex_hull" in keys:
+            decoded["convex_hull"] = json.loads(encoded["convex_hull"])
+
+        if "range" in keys:
+            decoded["range"] = (encoded["min"], encoded["max"])
+
+        for key in ("valid_percentage", "mean", "stdev"):
+            if key in keys:
+                decoded[key] = encoded[key]
+
+        if "percentiles" in keys:
+            decoded["percentiles"] = np.frombuffer(
+                encoded["percentiles"], dtype="float32"
+            ).tolist()
+
+        if "metadata" in keys:
+            decoded["metadata"] = json.loads(encoded["metadata"])
+
         return decoded

@@ -177,6 +177,7 @@ class TerracottaDriver:
 
         """
         keys = self._standardize_keys(keys)
+        print("standardized keys: ", keys)
 
         with self.meta_store.connect():
             metadata = self.meta_store.get_metadata(keys)
@@ -205,7 +206,7 @@ class TerracottaDriver:
 
         return metadata
 
-    def get_metadatas(self, keys: ExtendedKeysType, items: List[List[str]]) -> Dict[str, Any]:
+    def get_multiple_metadata(self, keys: Optional[List[str]], items: List[List[str]]) -> Dict[str, Any]:
         """Return all stored metadata for given keys.
 
         Arguments:
@@ -227,32 +228,8 @@ class TerracottaDriver:
             - ``metadata``: any additional client-relevant metadata
 
         """
-        keys = self._standardize_keys(keys)
-
         with self.meta_store.connect():
-            metadata = self.meta_store.get_metadatas(keys, items)
-
-            if metadata is None:
-                # metadata is not computed yet, trigger lazy loading
-                dataset = self.get_datasets(keys)
-                if not dataset:
-                    raise exceptions.DatasetNotFoundError("No dataset found")
-
-                path = squeeze(dataset.values())
-                metadata = self.compute_metadata(
-                    path, max_shape=self.LAZY_LOADING_MAX_SHAPE
-                )
-
-                try:
-                    self.insert(keys, path, metadata=metadata)
-                except exceptions.DatabaseNotWritableError as exc:
-                    raise exceptions.DatabaseNotWritableError(
-                        "Lazy loading requires a writable database"
-                    ) from exc
-
-                # ensure standardized/consistent output (types and floating point precision)
-                metadata = self.meta_store.get_metadata(keys)
-                assert metadata is not None
+            metadata = self.meta_store.get_multiple_metadata(keys, items)
 
         return metadata
 
