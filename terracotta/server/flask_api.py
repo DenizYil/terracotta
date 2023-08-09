@@ -132,6 +132,7 @@ def create_app(debug: bool = False, profile: bool = False) -> Flask:
         SPEC.path(view=terracotta.server.keys.get_keys)
         SPEC.path(view=terracotta.server.colormap.get_colormap)
         SPEC.path(view=terracotta.server.metadata.get_metadata)
+        SPEC.path(view=terracotta.server.metadata.post_metadata)
         SPEC.path(view=terracotta.server.rgb.get_rgb)
         SPEC.path(view=terracotta.server.rgb.get_rgb_preview)
         SPEC.path(view=terracotta.server.singleband.get_singleband)

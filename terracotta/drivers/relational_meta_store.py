@@ -98,7 +98,7 @@ class RelationalMetaStore(MetaStore, ABC):
         self.url = self._parse_path(path)
         self.sqla_engine = sqla.create_engine(
             self.url,
-            echo=True,
+            echo=False,
             future=True,
             connect_args={self.SQL_TIMEOUT_KEY: db_connection_timeout},
             # automatically re-spawn stale connections, see terracotta#266
@@ -383,20 +383,35 @@ class RelationalMetaStore(MetaStore, ABC):
 
     @trace("get_multiple_metadata")
     @convert_exceptions("Could not retrieve metadata")
-    def get_multiple_metadata(self, keys: Optional[List[str]], datasets: List[List[str]]) -> Optional[Dict[str, Any]]:
+    def get_multiple_metadata(self, keys: Optional[Set[str]], datasets: List[List[str]]) -> Optional[Dict[str, Any]]:
         metadata_table = sqla.Table(
             "metadata", self.sqla_metadata, autoload_with=self.sqla_engine
         )
 
         key_names = self.key_names
 
-        if keys:
-            # print all columns
-            print("Columsn", metadata_table.c.keys())
-            columns = [metadata_table.c[key] for key in keys]
-            stmt = metadata_table.select(*columns)
-        else:
-            stmt = metadata_table.select()
+        stmt = metadata_table.select()
+
+        if keys is not None:
+            searchable_columns = list(keys.union(key_names))
+
+            if "bounds" in keys:
+                for d in ("north", "east", "south", "west"):
+                    searchable_columns.append(f"bounds_{d}")
+
+                searchable_columns.remove("bounds")
+
+            if "range" in keys:
+                searchable_columns.append("min")
+                searchable_columns.append("max")
+                searchable_columns.remove("range")
+
+            try:
+                columns = [metadata_table.c[key] for key in searchable_columns]
+            except KeyError:
+                raise exceptions.InvalidKeyError(f"unknown column in {keys}, valid columns are {key_names + self._METADATA_COLUMNS + ('bounds', 'range')}")
+
+            stmt = stmt.with_only_columns(*columns)
 
         stmt = stmt.where(
             sqla.or_(
@@ -414,13 +429,13 @@ class RelationalMetaStore(MetaStore, ABC):
             return None
 
         metadata = []
-        data_columns, _ = zip(*self._METADATA_COLUMNS)
+        data_columns, _ = zip(*self._METADATA_COLUMNS) if keys is None else (searchable_columns, None)
 
         for row in rows:
             encoded_data = {col: getattr(row, col) for col in data_columns}
 
-            if keys:
-                decoded = self._decode_specific_data(encoded_data, set(keys))
+            if keys is not None:
+                decoded = self._decode_specific_data(encoded_data, keys)
             else:
                 decoded = self._decode_data(encoded_data)
 
@@ -550,7 +565,7 @@ class RelationalMetaStore(MetaStore, ABC):
         if "range" in keys:
             decoded["range"] = (encoded["min"], encoded["max"])
 
-        for key in ("valid_percentage", "mean", "stdev"):
+        for key in ("valid_percentage", "mean", "stdev", *(f"bounds_{d}" for d in ("north", "east", "south", "west"))):
             if key in keys:
                 decoded[key] = encoded[key]
 

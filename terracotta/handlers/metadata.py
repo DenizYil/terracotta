@@ -25,5 +25,5 @@ def multiple_metadata(keys: Optional[List[str]], datasets: List[List[str]]) -> D
     """Returns all metadata for multiple datasets"""
     settings = get_settings()
     driver = get_driver(settings.DRIVER_PATH, provider=settings.DRIVER_PROVIDER)
-    metadata = driver.get_multiple_metadata(keys, datasets)
+    metadata = driver.get_multiple_metadata(set(keys) if keys else None, datasets)
     return metadata
