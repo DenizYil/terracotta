@@ -336,9 +336,6 @@ class RelationalMetaStore(MetaStore, ABC):
             "datasets", self.sqla_metadata, autoload_with=self.sqla_engine
         )
 
-        for column, values in where.items():
-            print("Column", column, "Values", values)
-
         stmt = (
             datasets_table.select()
             .where(
