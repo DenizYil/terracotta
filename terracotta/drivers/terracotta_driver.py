@@ -206,17 +206,18 @@ class TerracottaDriver:
 
         return metadata
 
-    def get_multiple_metadata(self, keys: Optional[List[str]], items: List[List[str]]) -> Dict[str, Any]:
-        """Return all stored metadata for given keys.
+    def get_multiple_metadata(self, keys: Optional[List[str]], datasets: List[List[str]]) -> Dict[str, Any]:
+        """Return all stored metadata for multiple datasets. Returned metadata can be filtered using the keys argument.
 
         Arguments:
 
-            keys: Keys of the requested dataset. Can either be given as a sequence of key values,
-                or as a mapping ``{key_name: key_value}``.
+            keys: Keys or columns to return. If None, all columns will be returned.
+
+            datasets: List of datasets to retrieve metadata for. Each dataset is a list of keys.
 
         Returns:
 
-            A :class:`dict` with the values
+            A :class:`dict` with the values if no keys are given:
 
             - ``range``: global minimum and maximum value in dataset
             - ``bounds``: physical bounds covered by dataset in latitude-longitude projection
@@ -227,9 +228,19 @@ class TerracottaDriver:
             - ``stdev``: global standard deviation
             - ``metadata``: any additional client-relevant metadata
 
+            If keys are specifeid, the returned :class:`dict` will contain the requested
+            keys/columns. The columns above are allowed, as well as the following:
+
+            - ``bounds_north``: northern bound of dataset in WGS84 projection
+            - ``bounds_west``: western bound of dataset in WGS84 projection
+            - ``bounds_east``: eastern bound of dataset in WGS84 projection
+            - ``bounds_south``: southern bound of dataset in WGS84 projection
+            - ``min``: minimum data value for the range
+            - ``max``: maximum data value for the range
+
         """
         with self.meta_store.connect():
-            metadata = self.meta_store.get_multiple_metadata(keys, items)
+            metadata = self.meta_store.get_multiple_metadata(keys, datasets)
 
         return metadata
 
