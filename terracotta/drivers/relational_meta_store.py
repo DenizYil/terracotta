@@ -565,7 +565,7 @@ class RelationalMetaStore(MetaStore, ABC):
         if "range" in keys:
             decoded["range"] = (encoded["min"], encoded["max"])
 
-        for key in ("valid_percentage", "mean", "stdev", *(f"bounds_{d}" for d in ("north", "east", "south", "west"))):
+        for key in ("valid_percentage", "mean", "stdev", "min", "max", *(f"bounds_{d}" for d in ("north", "east", "south", "west"))):
             if key in keys:
                 decoded[key] = encoded[key]
 

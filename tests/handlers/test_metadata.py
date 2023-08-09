@@ -26,3 +26,6 @@ def test_multiple_metadata_handler(use_testdb):
     assert md
     assert len(md[0].keys()) == 4
     assert all(list(key in md[0] for key in ("bounds", "metadata", "bounds_south", "keys")))
+
+    md = metadata.multiple_metadata(None, [])
+    assert len(md) == len(ds)

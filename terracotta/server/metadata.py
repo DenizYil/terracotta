@@ -9,16 +9,6 @@ from flask import jsonify, Response, request
 from terracotta.server.flask_api import METADATA_API
 
 
-class MetadataDatasetsSchema(Schema):
-    keys = fields.List(
-        fields.List(
-            fields.String(example="key1")
-        ),
-        required=True,
-        description="Array containing all available key combinations",
-    )
-
-
 class MetadataSchema(Schema):
     class Meta:
         ordered = True
@@ -60,6 +50,33 @@ class MetadataSchema(Schema):
     )
 
 
+class MultipleMetadataSchema(MetadataSchema):
+    bounds_north = fields.Number(
+        required=False,
+        description="Northern bound of dataset in WGS84 projection"
+    )
+    bounds_west = fields.Number(
+        required=False,
+        description="Western bound of dataset in WGS84 projection"
+    )
+    bounds_east = fields.Number(
+        required=False,
+        description="Eastern bound of dataset in WGS84 projection"
+    )
+    bounds_south = fields.Number(
+        required=False,
+        description="Southern bound of dataset in WGS84 projection"
+    )
+    min = fields.Number(
+        required=False,
+        description="Minimum data value for the range"
+    )
+    max = fields.Number(
+        required=False,
+        description="Maximum data value for the range"
+    )
+
+
 @METADATA_API.route("/metadata/<path:keys>", methods=["GET"])
 def get_metadata(keys: str) -> Response:
     """Get metadata for a given dataset
@@ -97,16 +114,22 @@ def post_metadata(keys: Optional[str] = None) -> Response:
         summary: /metadata/<optional keys>
         description: Retrieve metadata for multiple datasets, identified by the body payload. Desired columns can be filtered as a query parameter.
         parameters:
-          - name: keys
+          - name: columns
             in: path
-            description: Keys of dataset to retrieve metadata for (e.g. 'value1/value2')
+            description: Keys or columns of dataset to be returned. If excluded, all columns will be returned (e.g. 'value1/value2')
             type: path
+            required: false
+          - name: keys
+            in: body
+            description: A nested array of keys of dataset to retrieve metadata for (e.g. [[value1, value2], [...]])
+            type: body
             required: true
-          -
         responses:
             200:
                 description: All metadata for given dataset
                 schema: MetadataSchema
+            400:
+                description: Invalid keys or columsn in the query
             404:
                 description: No dataset found for given key combination
     """
@@ -115,5 +138,5 @@ def post_metadata(keys: Optional[str] = None) -> Response:
     datasets = request.json["keys"]
     parsed_keys = [key for key in keys.split("/") if key] if keys else None
     payload = multiple_metadata(parsed_keys, datasets)
-    schema = MetadataSchema(many=True, partial=True)
+    schema = MultipleMetadataSchema(many=True, partial=True)
     return jsonify(schema.load(payload))
